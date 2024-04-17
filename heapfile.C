@@ -252,12 +252,11 @@ const Status HeapFileScan::scanNext(RID& outRid) {
 
     // Check if curPage is NULL and handle it
     if (curPage == NULL) {
-        // curPageNo = headerPage->firstPage;
-        // status = bufMgr->readPage(filePtr, curPageNo, curPage);
-        // if (status != OK) {
-        //     return status;
-        // }
         return BADPAGEPTR;
+    }
+
+    if (curPageNo < 0) {
+        return FILEEOF;
     }
 
     // Start search from next record after curRec and advance page to first one with records if we are at ENDOFPAGE
@@ -277,9 +276,12 @@ const Status HeapFileScan::scanNext(RID& outRid) {
             if (status != OK) {
                 return status;
             }
+            curPage = NULL;
+            curPageNo = -1;
+
             curDirtyFlag = false;
             curPageNo = nextPageNo;
-            curPage->getNextPage(nextPageNo);
+            // curPage->getNextPage(nextPageNo);
 
             status = bufMgr->readPage(filePtr, curPageNo, curPage);
             if (status != OK) {
@@ -290,11 +292,6 @@ const Status HeapFileScan::scanNext(RID& outRid) {
     } else if (status != OK) {
         return status;
     }
-
-    // status = curPage->getNextPage(nextPageNo);
-    // if (status != OK) {
-    //     return status;
-    // }
 
     // Loop through each page until match is found
     while (true) {
@@ -316,12 +313,13 @@ const Status HeapFileScan::scanNext(RID& outRid) {
             // Get the next RID on the page
             if (curPage->nextRecord(tmpRid, nextRid) == ENDOFPAGE) {
                 // cout << "END OF PAGE: " << curPageNo << " " << nextPageNo << " ";
+                curPage->getNextPage(nextPageNo);
+
                 // Unpin the current page
                 status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
                 curDirtyFlag = false;
 
                 // Move to the next page if valid
-                curPage->getNextPage(nextPageNo);
                 if (nextPageNo != -1) {
                     curPageNo = nextPageNo;
                     status = bufMgr->readPage(filePtr, curPageNo, curPage);
@@ -330,6 +328,10 @@ const Status HeapFileScan::scanNext(RID& outRid) {
                         return status;
                     }
 
+                    status = curPage->firstRecord(tmpRid);
+                    if (status != OK) {
+                        return status;
+                    }
                     // cout << "END OF PAGE AFTER INC: " << curPageNo << " " << nextPageNo << " " << endl;
                 }
 
